@@ -5,6 +5,8 @@ import iuh.fit.shared.api.ApiResponse;
 import iuh.fit.shared.api.ValidationViolation;
 import iuh.fit.shared.error.BusinessException;
 import iuh.fit.shared.error.ErrorCode;
+import iuh.fit.shared.trace.TraceIdConstants;
+import iuh.fit.shared.trace.TraceIdContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
@@ -25,8 +27,6 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    private static final String TRACE_ID_HEADER = "X-Trace-Id";
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex, HttpServletRequest request) {
@@ -150,11 +150,19 @@ public class GlobalExceptionHandler {
     }
 
     private static String resolveTraceId(HttpServletRequest request) {
-        if (request == null) {
-            return null;
+        if (request != null) {
+            Object attr = request.getAttribute(TraceIdConstants.REQUEST_ATTRIBUTE);
+            if (attr instanceof String traceId && !traceId.isBlank()) {
+                return traceId;
+            }
+
+            String headerTraceId = request.getHeader(TraceIdConstants.HEADER_NAME);
+            if (headerTraceId != null && !headerTraceId.isBlank()) {
+                return headerTraceId;
+            }
         }
 
-        String traceId = request.getHeader(TRACE_ID_HEADER);
-        return (traceId == null || traceId.isBlank()) ? null : traceId;
+        String contextTraceId = TraceIdContext.get();
+        return (contextTraceId == null || contextTraceId.isBlank()) ? null : contextTraceId;
     }
 }
