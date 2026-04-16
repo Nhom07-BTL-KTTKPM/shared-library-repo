@@ -8,6 +8,9 @@ import iuh.fit.shared.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -36,23 +39,23 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, ConstraintViolationException.class})
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception ex, HttpServletRequest request) {
-                List<ValidationViolation> violations;
-                if (ex instanceof MethodArgumentNotValidException methodArgumentNotValidException) {
-                        violations = mapFieldErrors(methodArgumentNotValidException.getBindingResult().getFieldErrors());
-                } else if (ex instanceof BindException bindException) {
-                        violations = mapFieldErrors(bindException.getBindingResult().getFieldErrors());
-                } else if (ex instanceof ConstraintViolationException constraintViolationException) {
-                        violations = constraintViolationException.getConstraintViolations()
-                                        .stream()
-                                        .map(violation -> new ValidationViolation(
-                                                        violation.getPropertyPath().toString(),
-                                                        violation.getMessage(),
-                                                        valueToString(violation.getInvalidValue())
-                                        ))
-                                        .toList();
-                } else {
-                        violations = List.of();
-                }
+        List<ValidationViolation> violations;
+        if (ex instanceof MethodArgumentNotValidException methodArgumentNotValidException) {
+            violations = mapFieldErrors(methodArgumentNotValidException.getBindingResult().getFieldErrors());
+        } else if (ex instanceof BindException bindException) {
+            violations = mapFieldErrors(bindException.getBindingResult().getFieldErrors());
+        } else if (ex instanceof ConstraintViolationException constraintViolationException) {
+            violations = constraintViolationException.getConstraintViolations()
+                    .stream()
+                    .map(violation -> new ValidationViolation(
+                            violation.getPropertyPath().toString(),
+                            violation.getMessage(),
+                            valueToString(violation.getInvalidValue())
+                    ))
+                    .toList();
+        } else {
+            violations = List.of();
+        }
 
         ApiError error = new ApiError(
                 ErrorCode.VALIDATION_ERROR.code(),
@@ -76,6 +79,51 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(ErrorCode.BAD_REQUEST.httpStatus())
                 .body(ApiResponse.failure(ErrorCode.BAD_REQUEST.defaultMessage(), error, resolveTraceId(request)));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMalformedJson(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        String detail = "Malformed JSON request";
+        Throwable mostSpecificCause = ex.getMostSpecificCause();
+        if (mostSpecificCause != null && mostSpecificCause.getMessage() != null && !mostSpecificCause.getMessage().isBlank()) {
+            detail = mostSpecificCause.getMessage();
+        }
+
+        ApiError error = new ApiError(
+                ErrorCode.BAD_REQUEST.code(),
+                detail,
+                Map.of("reason", "MALFORMED_JSON"),
+                List.of()
+        );
+
+        return ResponseEntity.status(ErrorCode.BAD_REQUEST.httpStatus())
+                .body(ApiResponse.failure(ErrorCode.BAD_REQUEST.defaultMessage(), error, resolveTraceId(request)));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex, HttpServletRequest request) {
+        ApiError error = new ApiError(
+                ErrorCode.UNAUTHORIZED.code(),
+                ex.getMessage(),
+                Map.of(),
+                List.of()
+        );
+
+        return ResponseEntity.status(ErrorCode.UNAUTHORIZED.httpStatus())
+                .body(ApiResponse.failure(ErrorCode.UNAUTHORIZED.defaultMessage(), error, resolveTraceId(request)));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex, HttpServletRequest request) {
+        ApiError error = new ApiError(
+                ErrorCode.FORBIDDEN.code(),
+                ex.getMessage(),
+                Map.of(),
+                List.of()
+        );
+
+        return ResponseEntity.status(ErrorCode.FORBIDDEN.httpStatus())
+                .body(ApiResponse.failure(ErrorCode.FORBIDDEN.defaultMessage(), error, resolveTraceId(request)));
     }
 
     @ExceptionHandler(Exception.class)
