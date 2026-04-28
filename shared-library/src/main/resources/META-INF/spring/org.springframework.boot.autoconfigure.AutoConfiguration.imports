@@ -1,0 +1,2 @@
+iuh.fit.shared.autoconfigure.SharedWebAutoConfiguration
+iuh.fit.shared.autoconfigure.SharedFeignTraceAutoConfiguration
